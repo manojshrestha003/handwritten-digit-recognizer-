@@ -1,75 +1,139 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import axios from 'axios';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function App() {
+  const [imageUri, setImageUri] = useState(null);
+  const [predictedDigit, setPredictedDigit] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-export default function HomeScreen() {
+  const pickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Required', 'Please allow access to the gallery.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const selectedAsset = result.assets[0];
+      setImageUri(selectedAsset.uri);
+      setPredictedDigit(null);
+    }
+  };
+
+  const predictDigit = async () => {
+    if (!imageUri) return;
+
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: imageUri,
+      name: 'digit.jpg',
+      type: 'image/jpeg',
+    });
+
+    try {
+      const response = await axios.post('http://192.168.18.123:8000/predict', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPredictedDigit(response.data.predicted_digit); // <-- Fixed here
+    } catch (error) {
+      console.error('Prediction error:', error);
+      Alert.alert('Error', 'Could not get prediction. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
+    <View style={styles.container}>
+      <Text style={styles.title}>🧠 Digit Recognizer</Text>
+
+      <TouchableOpacity style={styles.button} onPress={pickImage}>
+        <Text style={styles.buttonText}>📷 Select Image</Text>
+      </TouchableOpacity>
+
+      {imageUri && (
         <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+          source={{ uri: imageUri }}
+          style={styles.image}
+          resizeMode="contain"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      )}
+
+      <TouchableOpacity
+        style={[styles.button, (!imageUri || loading) && styles.disabledButton]}
+        onPress={predictDigit}
+        disabled={!imageUri || loading}
+      >
+        <Text style={styles.buttonText}>{loading ? 'Predicting...' : '🔍 Predict'}</Text>
+      </TouchableOpacity>
+
+      {loading && <ActivityIndicator size="large" color="#00ff00" style={{ marginTop: 15 }} />}
+
+      {predictedDigit !== null && (
+        <Text style={styles.result}>✅ Predicted Digit: {predictedDigit}</Text>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: {
+    flex: 1,
+    backgroundColor: '#111',
     alignItems: 'center',
-    gap: 8,
+    paddingTop: 60,
+    paddingHorizontal: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 30,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  button: {
+    backgroundColor: '#ff5555',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  disabledButton: {
+    backgroundColor: '#555',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  image: {
+    width: 220,
+    height: 220,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    marginBottom: 20,
+  },
+  result: {
+    color: '#00ff00',
+    fontSize: 20,
+    marginTop: 20,
   },
 });
